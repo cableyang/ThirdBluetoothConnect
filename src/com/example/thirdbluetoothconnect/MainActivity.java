@@ -21,6 +21,7 @@ import android.content.IntentFilter;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -56,11 +57,11 @@ public class MainActivity extends Activity {
     int SELECT = 0;
     myHandler mmhandler;
     connectThread cThread;
-    getThread gThread;
+     
     sendThread sThread;
     Button startandconnect,getinputstream,send;
     EditText outputstream;
-    
+    public boolean flag_rec_thread=false;
     
 	@Override
 	protected void onCreate(Bundle savedInstanceState) {
@@ -89,17 +90,57 @@ public class MainActivity extends Activity {
 		IntentFilter filter = new IntentFilter();
 		filter.addAction(BluetoothDevice.ACTION_FOUND);
 		registerReceiver(activityRceciver, filter);
-
+		getThread.start();//线程启动  
 		mmhandler = new myHandler();
-		
-		
+
 		startandconnect.setOnClickListener(new OnClickListener() {
 			
 			public void onClick(View v) {
 //				直接打开蓝牙
 				adapter.enable();
 //				开始搜索
-				adapter.startDiscovery();
+			//	adapter.startDiscovery();
+				_device = adapter.getRemoteDevice("81:F2:6D:97:2C:8D");
+	            // 用服务号得到socket
+	            try{
+	            	_socket = _device.createRfcommSocketToServiceRecord(UUID.fromString(MY_UUID));
+	            }catch(IOException e){
+//	            	Toast.makeText(this, "连接失败！", Toast.LENGTH_SHORT).show();
+	            }
+	            try
+				{	
+					_socket.connect();
+					Log.i("SOCKET", "连接"+_device.getName()+"成功！");
+					startandconnect.setText("连接成功");
+					//Toast.makeText(this, "连接"+_device.getName()+"成功！", Toast.LENGTH_SHORT).show();
+				} catch (IOException e)
+				{
+					
+	        		try
+					{
+//	        		Toast.makeText(this, "连接失败！", Toast.LENGTH_SHORT).show();
+					_socket.close();
+					startandconnect.setText("重新连接");
+					_socket = null;
+					} catch (IOException e1)
+					{
+						// TODO Auto-generated catch block
+//						Toast.makeText(this, "连接失败！", Toast.LENGTH_SHORT).show();	
+					}            		
+					// TODO Auto-generated catch block
+					return;
+				}
+	   
+	            //打开接收线程
+	            try{
+	        		blueStream = _socket.getInputStream();   //得到蓝牙数据输入流
+	        		//blueoutOutputStream=_socket.getOutputStream();//得到蓝牙输出数据
+//	        		Toast.makeText(this, "绑定数据流成功", Toast.LENGTH_SHORT).show();
+	        		}catch(IOException e){
+//	        			Toast.makeText(this, "接收数据失败！", Toast.LENGTH_SHORT).show();
+	        			return;
+	        		}
+			
 				
 			}
 		});
@@ -107,25 +148,18 @@ public class MainActivity extends Activity {
 		getinputstream.setOnClickListener(new OnClickListener() {
 			
 			public void onClick(View v) {
-				show.setText("开始传输");
-				if(gThread == null) {  
-					gThread = new getThread();  
-					gThread.start();//线程启动  
-                }  
 				
+				flag_rec_thread=!flag_rec_thread;
+				if (flag_rec_thread)
+				{
+					getinputstream.setText("正在接受");
+				}else {
+					getinputstream.setText("停止接受");
+				}
+			
 			}
 		});
 		
-		send.setOnClickListener(new OnClickListener() {
-			
-			public void onClick(View v) {
-				if(sThread == null) {  
-					sThread = new sendThread();  
-					sThread.start();//线程启动  
-                }  
-				
-			}
-		});
 		
 		listView.setOnItemClickListener(new OnItemClickListener(){
 
@@ -133,10 +167,50 @@ public class MainActivity extends Activity {
 			public void onItemClick(AdapterView<?> parent, View view,
 					int position, long id) {
 //				String add = parent.toString();
-				if(cThread == null) {  
+			/*	if(cThread == null) {  
 					cThread = new connectThread();  
 					cThread.start();//线程启动  
-                }
+                }         
+*/			
+				_device = adapter.getRemoteDevice("81:F2:6D:97:2C:8D");
+	            // 用服务号得到socket
+	            try{
+	            	_socket = _device.createRfcommSocketToServiceRecord(UUID.fromString(MY_UUID));
+	            }catch(IOException e){
+//	            	Toast.makeText(this, "连接失败！", Toast.LENGTH_SHORT).show();
+	            }
+	            try
+				{	
+					_socket.connect();
+					Log.i("SOCKET", "连接"+_device.getName()+"成功！");
+					//Toast.makeText(this, "连接"+_device.getName()+"成功！", Toast.LENGTH_SHORT).show();
+				} catch (IOException e)
+				{
+					
+	        		try
+					{
+//	        		Toast.makeText(this, "连接失败！", Toast.LENGTH_SHORT).show();
+					_socket.close();
+					_socket = null;
+					} catch (IOException e1)
+					{
+						// TODO Auto-generated catch block
+//						Toast.makeText(this, "连接失败！", Toast.LENGTH_SHORT).show();	
+					}            		
+					// TODO Auto-generated catch block
+					return;
+				}
+	   
+	            //打开接收线程
+	            try{
+	        		blueStream = _socket.getInputStream();   //得到蓝牙数据输入流
+	        		//blueoutOutputStream=_socket.getOutputStream();//得到蓝牙输出数据
+//	        		Toast.makeText(this, "绑定数据流成功", Toast.LENGTH_SHORT).show();
+	        		}catch(IOException e){
+//	        			Toast.makeText(this, "接收数据失败！", Toast.LENGTH_SHORT).show();
+	        			return;
+	        		}
+			
 			}
 			
 		});
@@ -175,18 +249,35 @@ public class MainActivity extends Activity {
 		public void handleMessage(Message msg) {
 			if(msg.what == 0x123){ 
 				String text;
-				text = msg.obj.toString();
+				text = (String) msg.obj;
                 show.setText(text);  
+                show.setTextSize(32);
             }  
 			super.handleMessage(msg);
 		}
 	}
 	
+	
+	public void on_send(View v)
+	{
+				byte []bs={0x01,0x02,0x03};
+				String sendoutput = outputstream.getText().toString();
+				try{
+					outstream = _socket.getOutputStream();
+					outstream.write(bs); 
+				}catch(IOException e) {  
+	                
+	            }  
+	}
+		 
+		
+
+	
 	public class connectThread extends Thread{
 		@Override
 		public void run() {
-			_device = adapter.getRemoteDevice(deviceaddress);
-			 
+		//	_device = adapter.getRemoteDevice(deviceaddress);
+			_device = adapter.getRemoteDevice("81:F2:6D:97:2C:8D");
             // 用服务号得到socket
             try{
             	_socket = _device.createRfcommSocketToServiceRecord(UUID.fromString(MY_UUID));
@@ -196,7 +287,8 @@ public class MainActivity extends Activity {
             try
 			{	
 				_socket.connect();
-//				Toast.makeText(this, "连接"+_device.getName()+"成功！", Toast.LENGTH_SHORT).show();
+				Log.i("SOCKET", "连接"+_device.getName()+"成功！");
+				//Toast.makeText(this, "连接"+_device.getName()+"成功！", Toast.LENGTH_SHORT).show();
 			} catch (IOException e)
 			{
 				
@@ -227,28 +319,53 @@ public class MainActivity extends Activity {
 		}
 	}
 	
-	public class getThread extends Thread{
+	Thread getThread =new Thread(){
 		@Override
 		public void run() {
-			while (true) {
-				try{
-					blueStream = _socket.getInputStream();
-					int num;
-					byte[] buffer =new byte[1024];
-					num = blueStream.read(buffer);
-					Message message = mmhandler.obtainMessage();  
-		            message.what = 0x123;  
-		            message.obj = num;  
-		            mmhandler.sendMessage(message);  
-				}catch(IOException e) {  
-	                break;  
-	            }  
+			
+			while (!currentThread().isInterrupted()) {
+				String rec="";
+				if(flag_rec_thread)
+				{
+					try{
+						blueStream = _socket.getInputStream();
+						int num;
+						byte[] buffer =new byte[1024];
+						num = blueStream.read(buffer);
+						
+						for(int i = 0 ; i < num; i++)
+						{ 		  
+						//readMessage[i]=String.format("%2x", bytes[i-count]);	
+						rec+=Integer.toHexString(buffer[i]&0xff);
+						}
+						
+						Message message = mmhandler.obtainMessage();  
+			            message.what = 0x123;  
+			            message.obj = rec;  
+			           
+			            mmhandler.sendMessage(message);  
+					}catch(IOException e) {  
+		                break;  
+		            }  
+					
+					try
+					{
+						sleep(100);
+					} catch (InterruptedException e)
+					{
+						// TODO Auto-generated catch block
+						e.printStackTrace();
+					}
+					
+				}
+				
 			}
 			
 			
-			super.run();
+			 
 		}
-	}
+	};
+	
 	public class sendThread extends Thread{
 		
 		String sendoutput = outputstream.getText().toString();
